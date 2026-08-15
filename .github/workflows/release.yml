@@ -1,0 +1,89 @@
+name: Release wp-ai-customer-service Plugin
+
+# 触发: 打 v*.*.* tag (如 v1.2.1) 或 手动在 Actions 页点 "Run workflow"
+on:
+  push:
+    tags: [ "v*.*.*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打包插件 zip (排除非运行时文件)
+        run: |
+          mkdir -p dist
+          zip -r dist/wp-ai-customer-service.zip . \
+            -x "*.git/*" \
+            -x "tests/*" \
+            -x "*.md" \
+            -x "*.zip" \
+            -x "*.tar.gz" \
+            -x ".githooks/*" \
+            -x ".github/*" \
+            -x "deploy.ps1" \
+            -x "logs/*"
+          echo "=== zip contents 前 20 项 ==="
+          unzip -l dist/wp-ai-customer-service.zip | head -20
+
+      - name: 创建 GitHub Release 并上传 zip
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/wp-ai-customer-service.zip
+          generate_release_notes: true
+
+  # =========================================================================
+  # 生产部署(可选):把打包好的 zip 推到线上 WordPress 服务器解压
+  # 启用前需在仓库 Settings → Secrets and variables → Actions 中添加:
+  #   PROD_WP_SSH_HOST       生产服务器 IP/域名 (如 prod.example.com)
+  #   PROD_WP_SSH_USER       SSH 登录用户名 (如 wpdeploy)
+  #   PROD_WP_SSH_KEY        SSH 私钥内容 (对应 GitHub 部署公钥/服务器 authorized_keys)
+  #   PROD_WP_PLUGINS_DIR    WordPress 插件目录绝对路径 (如 /var/www/html/wp-content/plugins)
+  # 不需要生产部署时,直接删掉下面 deploy-production job 整个段
+  # =========================================================================
+  deploy-production:
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 重新打包 (确保 artifact 与 release 一致)
+        run: |
+          mkdir -p dist
+          zip -r dist/wp-ai-customer-service.zip . \
+            -x "*.git/*" -x "tests/*" -x "*.md" -x "*.zip" -x "*.tar.gz" \
+            -x ".githooks/*" -x ".github/*" -x "deploy.ps1" -x "logs/*"
+
+      - name: 通过 SSH 部署到生产 WordPress (scp 传 zip -> 远端 unzip -o 覆盖)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:     ${{ secrets.PROD_WP_SSH_HOST }}
+          username: ${{ secrets.PROD_WP_SSH_USER }}
+          key:      ${{ secrets.PROD_WP_SSH_KEY }}
+          port:     22
+          script_stop: true
+          script: |
+            set -euo pipefail
+            PLUGINS_DIR="${{ secrets.PROD_WP_PLUGINS_DIR }}"
+            TMP_ZIP="/tmp/wp-ai-customer-service.zip"
+            # 本脚本只负责远端 unzip;scp 传 zip 通过 ssh-action 不直接支持 -> 用 heredoc 传二进制有坑
+            # 所以这里用更加稳妥的方式: 用 SSH 端的 wget/curl 从 Release 公开下载链接拿 zip
+            # 若 Release 是私有的, 改为下面注释段的 GITHUB_TOKEN 方式
+            TAG="${GITHUB_REF_NAME}"
+            RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wp-ai-customer-service.zip"
+            echo "[deploy] tag=${TAG} downloading ${RELEASE_URL} -> ${TMP_ZIP}"
+            curl -fsSL -o "${TMP_ZIP}" "${RELEASE_URL}"
+            mkdir -p "${PLUGINS_DIR}"
+            echo "[deploy] unzip -o to ${PLUGINS_DIR}/wp-ai-customer-service/"
+            rm -rf "${PLUGINS_DIR}/wp-ai-customer-service"
+            unzip -q -o "${TMP_ZIP}" -d "${PLUGINS_DIR}/wp-ai-customer-service"
+            rm -f "${TMP_ZIP}"
+            echo "[deploy] OK"

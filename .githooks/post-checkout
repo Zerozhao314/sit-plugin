@@ -1,0 +1,4 @@
+#!/bin/sh
+# git post-checkout hook: 切换分支 / 更新工作区后自动同步插件到 WSL DDEV 站点
+# 参数: $1=旧HEAD $2=新HEAD $3=flag(1=分支切换,0=文件检出);都同步,不管 flag
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".githooks/trigger-sync.ps1"

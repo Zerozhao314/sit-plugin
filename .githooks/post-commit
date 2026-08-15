@@ -1,0 +1,4 @@
+#!/bin/sh
+# git post-commit hook: 每次 commit 后自动同步插件到 WSL DDEV 站点
+# Git for Windows 会用自带的 sh/bash 执行此文件
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".githooks/trigger-sync.ps1"
