@@ -1,0 +1,15 @@
+# wp-ai-customer-service 插件 .gitignore
+
+# 日志
+logs/
+
+# 依赖
+vendor/
+node_modules/
+
+# 构建产物
+*.zip
+*.tar.gz
+
+# 环境变量
+.env

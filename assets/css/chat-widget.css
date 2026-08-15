@@ -1,0 +1,606 @@
+/* ===== 完整样式（已压缩优化） ===== */
+
+#wp-ai-cs-widget * {
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+#wp-ai-cs-widget {
+    position: fixed;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+/* 触发按钮 */
+#wp-ai-cs-toggle {
+    color: #fff;
+    padding: 14px 24px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    user-select: none;
+    position: relative;
+}
+
+#wp-ai-cs-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0,0,0,0.3);
+}
+
+#wp-ai-cs-toggle .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff4444;
+    color: #fff;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 聊天窗口：PC 端宽度 400 固定，高度随消息内容自适应 (上限 560px) */
+#wp-ai-cs-box {
+    width: 400px;
+    max-width: calc(100vw - 32px);
+    max-height: 560px;
+    height: auto;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 12px;
+    animation: wp-ai-cs-slideUp 0.3s ease;
+}
+
+/* 矮屏 (如笔记本横屏 768px 高) 限制为视口高度减去上下边距，避免超出屏幕 */
+@media (max-height: 720px) {
+    #wp-ai-cs-box {
+        max-height: calc(100vh - 120px);
+    }
+}
+
+@keyframes wp-ai-cs-slideUp {
+    from { opacity: 0; transform: translateY(20px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 头部 */
+#wp-ai-cs-header {
+    padding: 16px 20px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#wp-ai-cs-header .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#wp-ai-cs-header .avatar {
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+#wp-ai-cs-header .title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+#wp-ai-cs-header .title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#wp-ai-cs-header .status {
+    font-size: 12px;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#wp-ai-cs-header .status .dot {
+    width: 8px;
+    height: 8px;
+    background: #4caf50;
+    border-radius: 50%;
+    display: inline-block;
+    animation: wp-ai-cs-pulse 1.5s infinite;
+}
+
+@keyframes wp-ai-cs-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+#wp-ai-cs-header .close-btn {
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    padding: 0 4px;
+}
+
+#wp-ai-cs-header .close-btn:hover {
+    opacity: 1;
+}
+
+/* 消息区域 */
+#wp-ai-cs-messages {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 16px 20px;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 220px;
+}
+
+#wp-ai-cs-messages::-webkit-scrollbar {
+    width: 4px;
+}
+#wp-ai-cs-messages::-webkit-scrollbar-thumb {
+    background: #d0d0d0;
+    border-radius: 10px;
+}
+
+.msg {
+    max-width: 85%;
+    padding: 10px 16px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    word-wrap: break-word;
+    animation: wp-ai-cs-msgIn 0.25s ease;
+    margin-bottom: 2px;
+}
+
+/* 限制消息内 emoji 和图片尺寸 */
+.msg img,
+.msg img.emoji,
+.msg img.wp-smiley,
+.msg img.smilie {
+    display: inline !important;
+    height: 1.2em !important;
+    width: 1.2em !important;
+    max-height: 24px !important;
+    max-width: 24px !important;
+    min-height: 16px !important;
+    min-width: 16px !important;
+    vertical-align: -0.15em !important;
+    margin: 0 2px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: none !important;
+    padding: 0 !important;
+    font-size: inherit !important;
+    line-height: 1 !important;
+    object-fit: contain !important;
+}
+
+/* 聊天消息中的链接样式 */
+.msg a {
+    color: #0066ff;
+    text-decoration: underline;
+    word-break: break-all;
+}
+.msg a:hover {
+    text-decoration: none;
+    opacity: 0.8;
+}
+
+/* 限制快速回复按钮内的 emoji 尺寸 */
+#wp-ai-cs-quick-replies button img,
+#wp-ai-cs-quick-replies button img.emoji {
+    height: 1em !important;
+    width: 1em !important;
+    max-height: 16px !important;
+    max-width: 16px !important;
+    vertical-align: -0.1em !important;
+    margin: 0 1px !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 限制头像和图标内的 emoji */
+#wp-ai-cs-header .avatar img,
+#wp-ai-cs-header .avatar img.emoji {
+    height: 20px !important;
+    width: 20px !important;
+    max-height: 20px !important;
+    max-width: 20px !important;
+    vertical-align: middle !important;
+}
+
+/* 限制触发器按钮内的 emoji */
+#wp-ai-cs-toggle .toggle-icon img,
+#wp-ai-cs-toggle .toggle-icon img.emoji {
+    height: 20px !important;
+    width: 20px !important;
+    max-height: 20px !important;
+    max-width: 20px !important;
+    vertical-align: middle !important;
+}
+
+@keyframes wp-ai-cs-msgIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.msg.bot {
+    background: #ffffff;
+    color: #1a1a2e;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.msg.user {
+    background: var(--wp-ai-cs-primary, #0066ff);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+}
+
+.msg .time {
+    font-size: 10px;
+    opacity: 0.5;
+    margin-top: 4px;
+    display: block;
+}
+
+/* 快捷回复 - 单行横向滚动,鼠标滚轮/hover 边缘可滚动 */
+#wp-ai-cs-quick-replies {
+    display: flex;
+    gap: 6px;
+    padding: 6px 16px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    background: #f8f9fa;
+    border-top: 1px solid #eee;
+    position: relative;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: #b0b0b0 transparent;
+}
+
+#wp-ai-cs-quick-replies::-webkit-scrollbar {
+    display: block;
+    height: 5px;
+}
+
+#wp-ai-cs-quick-replies::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.05);
+    border-radius: 3px;
+}
+
+#wp-ai-cs-quick-replies::-webkit-scrollbar-thumb {
+    background-color: #b0b0b0;
+    border-radius: 3px;
+}
+
+#wp-ai-cs-quick-replies::-webkit-scrollbar-thumb:hover {
+    background-color: #888;
+}
+
+/* Edge fade - 内容超出时渐隐提示可滚动 */
+#wp-ai-cs-quick-replies.has-right-edge::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 5px;
+    right: 0;
+    width: 24px;
+    background: linear-gradient(to left, #f8f9fa, rgba(248,249,250,0));
+    pointer-events: none;
+    z-index: 2;
+}
+
+#wp-ai-cs-quick-replies.has-left-edge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 5px;
+    left: 0;
+    width: 24px;
+    background: linear-gradient(to right, #f8f9fa, rgba(248,249,250,0));
+    pointer-events: none;
+    z-index: 2;
+}
+
+#wp-ai-cs-quick-replies button {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border: 1px solid var(--wp-ai-cs-primary, #0066ff);
+    background: transparent;
+    color: var(--wp-ai-cs-primary, #0066ff);
+    border-radius: 16px;
+    font-size: 12px;
+    line-height: 1.3;
+    height: 28px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    width: auto;
+    max-width: none;
+}
+
+#wp-ai-cs-quick-replies button:hover {
+    background: var(--wp-ai-cs-primary, #0066ff);
+    color: #fff;
+}
+
+/* 输入区域 */
+#wp-ai-cs-input-area {
+    display: flex;
+    padding: 12px 16px;
+    gap: 10px;
+    border-top: 1px solid #eee;
+    background: #fff;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+#wp-ai-cs-input {
+    flex: 1;
+    padding: 10px 16px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 25px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    min-width: 0;
+    background: #f8f9fa;
+}
+
+#wp-ai-cs-input:focus {
+    border-color: var(--wp-ai-cs-primary, #0066ff);
+    background: #fff;
+}
+
+#wp-ai-cs-input-area button {
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+#wp-ai-cs-input-area button:hover {
+    transform: scale(1.02);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+
+/* 加载动画 */
+.wp-ai-cs-typing {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+}
+
+.wp-ai-cs-typing span {
+    width: 8px;
+    height: 8px;
+    background: #999;
+    border-radius: 50%;
+    animation: wp-ai-cs-typingAnim 1.4s infinite both;
+}
+
+.wp-ai-cs-typing span:nth-child(2) { animation-delay: 0.2s; }
+.wp-ai-cs-typing span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes wp-ai-cs-typingAnim {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+    #wp-ai-cs-widget {
+        bottom: 0 !important;
+        right: 0 !important;
+        left: 0 !important;
+        top: 0 !important;
+        padding: 0;
+        align-items: stretch;
+    }
+
+    /* 触发按钮：固定在右下角，避开 iOS safe area */
+    #wp-ai-cs-toggle {
+        position: fixed;
+        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        right: calc(16px + env(safe-area-inset-right, 0px));
+        padding: 12px 16px;
+        font-size: 13px;
+        border-radius: 50px;
+        z-index: 99999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+
+    #wp-ai-cs-toggle .toggle-text {
+        display: none;
+    }
+
+    #wp-ai-cs-toggle .toggle-icon {
+        font-size: 20px;
+    }
+
+    /* 聊天窗口：全屏覆盖 */
+    #wp-ai-cs-box {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        height: 100dvh;
+        border-radius: 0;
+        margin: 0;
+        box-shadow: none;
+        animation: wp-ai-cs-slideUpMobile 0.3s ease;
+    }
+
+    @keyframes wp-ai-cs-slideUpMobile {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    /* 头部：适配 safe area */
+    #wp-ai-cs-header {
+        padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
+        border-radius: 0;
+        min-height: 56px;
+        padding-top: max(14px, env(safe-area-inset-top, 0px));
+    }
+
+    #wp-ai-cs-header .avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+
+    #wp-ai-cs-header .title {
+        font-size: 15px;
+    }
+
+    #wp-ai-cs-header .close-btn {
+        font-size: 24px;
+        padding: 4px 8px;
+    }
+
+    /* 消息区域 */
+    #wp-ai-cs-messages {
+        padding: 12px 14px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .msg {
+        max-width: 88%;
+        font-size: 15px;
+        padding: 10px 14px;
+        line-height: 1.55;
+    }
+
+    /* 移动端 emoji 尺寸：跟随移动端文字大小 (15px) */
+    .msg img,
+    .msg img.emoji,
+    .msg img.wp-smiley,
+    .msg img.smilie {
+        height: 1.2em !important;
+        width: 1.2em !important;
+        max-height: 20px !important;
+        max-width: 20px !important;
+        min-height: 14px !important;
+        min-width: 14px !important;
+        vertical-align: -0.15em !important;
+        margin: 0 2px !important;
+    }
+
+    /* 移动端快速回复按钮 emoji 尺寸 */
+    #wp-ai-cs-quick-replies button img,
+    #wp-ai-cs-quick-replies button img.emoji {
+        height: 1em !important;
+        width: 1em !important;
+        max-height: 14px !important;
+        max-width: 14px !important;
+        vertical-align: -0.1em !important;
+        margin: 0 1px !important;
+    }
+
+    /* 移动端头部头像 emoji 尺寸 */
+    #wp-ai-cs-header .avatar img,
+    #wp-ai-cs-header .avatar img.emoji {
+        height: 18px !important;
+        width: 18px !important;
+        max-height: 18px !important;
+        max-width: 18px !important;
+    }
+
+    /* 移动端触发按钮 emoji 尺寸 */
+    #wp-ai-cs-toggle .toggle-icon img,
+    #wp-ai-cs-toggle .toggle-icon img.emoji {
+        height: 20px !important;
+        width: 20px !important;
+        max-height: 20px !important;
+        max-width: 20px !important;
+    }
+
+    /* 快捷回复按钮：触摸优化 */
+    #wp-ai-cs-quick-replies {
+        padding: 6px 10px;
+        gap: 5px;
+    }
+
+    #wp-ai-cs-quick-replies button {
+        padding: 3px 10px;
+        font-size: 12px;
+        line-height: 1.3;
+        height: 32px;
+        border-width: 1px;
+        width: auto;
+        max-width: none;
+    }
+
+    /* 输入区域：适配 safe area + 防止 iOS 缩放 */
+    #wp-ai-cs-input-area {
+        padding: 10px 12px;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        gap: 8px;
+    }
+
+    #wp-ai-cs-input {
+        font-size: 16px;
+        padding: 10px 14px;
+        border-radius: 22px;
+    }
+
+    #wp-ai-cs-input-area button {
+        padding: 10px 16px;
+        font-size: 14px;
+        border-radius: 22px;
+    }
+
+}
+
+@media (max-width: 380px) {
+    .msg { font-size: 14px; padding: 8px 12px; }
+    #wp-ai-cs-input { font-size: 16px; padding: 8px 12px; }
+    #wp-ai-cs-input-area button { padding: 8px 14px; font-size: 13px; }
+    #wp-ai-cs-header .title { font-size: 14px; }
+    #wp-ai-cs-quick-replies button { padding: 3px 10px; font-size: 11px; height: 26px; width: auto; max-width: none; }
+}
