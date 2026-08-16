@@ -1,0 +1,106 @@
+name: Release wp-ai-customer-service Plugin
+
+# 触发: 打 v*.*.* tag (如 v1.2.1) 或 手动在 Actions 页点 "Run workflow"
+on:
+  push:
+    tags: [ "v*.*.*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打包插件 zip (排除非运行时文件)
+        run: |
+          mkdir -p dist
+          zip -r dist/wp-ai-customer-service.zip . \
+            -x ".git/*" \
+            -x "tests/*" \
+            -x "*.md" \
+            -x "*.zip" \
+            -x "*.tar.gz" \
+            -x ".githooks/*" \
+            -x ".github/*" \
+            -x "deploy.ps1" \
+            -x "logs/*"
+          echo "=== zip contents 前 20 项 ==="
+          unzip -l dist/wp-ai-customer-service.zip | head -20
+
+      - name: 创建 GitHub Release 并上传 zip
+        uses: softprops/action-gh-release@v2
+        # 修复问题 1: tag 触发 或 手动触发(workflow_dispatch)都创建 Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          files: dist/wp-ai-customer-service.zip
+          generate_release_notes: true
+          # 手动触发时若没有对应 tag, 生成一个 draft release 供人工发布
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+
+  # =========================================================================
+  # 生产部署(可选): 把 Release 上的 zip 部署到线上 WordPress 服务器
+  #
+  # 启用条件(修复问题 2): 在仓库 Settings → Secrets and variables → Actions → Variables 添加:
+  #   ENABLE_PROD_DEPLOY = true
+  # 并在 Secrets 中添加:
+  #   PROD_WP_SSH_HOST       生产服务器 IP/域名 (如 prod.example.com)
+  #   PROD_WP_SSH_USER       SSH 登录用户名 (如 wpdeploy)
+  #   PROD_WP_SSH_KEY        SSH 私钥内容 (对应服务器 authorized_keys)
+  #   PROD_WP_PLUGINS_DIR    WordPress 插件目录绝对路径 (如 /var/www/html/wp-content/plugins)
+  #
+  # 同时在 Settings → Environments 创建 production 环境(可配 required reviewers 审批)
+  # 不需要生产部署时, 不配置上述 variable, 此 job 自动跳过
+  # =========================================================================
+  deploy-production:
+    needs: build-release
+    # 修复问题 2: 用 repository variable 控制开关, 默认不运行(不卡在 environment)
+    if: startsWith(github.ref, 'refs/tags/') && vars.ENABLE_PROD_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      # 修复问题 3: 用 gh CLI + GITHUB_TOKEN 从 Release 下载(支持私有仓库)
+      # GITHUB_TOKEN 由 Actions 自动注入, 无需额外配置; 在 runner 下载后通过 scp 传到生产服务器
+      # token 不会暴露给生产服务器
+      - name: 从 GitHub Release 下载 zip (带认证, 支持私有仓库)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "[deploy] 从 Release ${TAG} 下载 zip"
+          gh release download "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "wp-ai-customer-service.zip" \
+            --dir /tmp
+          ls -lh /tmp/wp-ai-customer-service.zip
+
+      - name: 通过 SCP 上传 zip 到生产服务器
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.PROD_WP_SSH_HOST }}
+          username: ${{ secrets.PROD_WP_SSH_USER }}
+          key:      ${{ secrets.PROD_WP_SSH_KEY }}
+          port:     22
+          source: /tmp/wp-ai-customer-service.zip
+          target: /tmp
+
+      - name: SSH 解压并部署到 WordPress 插件目录
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:     ${{ secrets.PROD_WP_SSH_HOST }}
+          username: ${{ secrets.PROD_WP_SSH_USER }}
+          key:      ${{ secrets.PROD_WP_SSH_KEY }}
+          port:     22
+          script_stop: true
+          script: |
+            set -euo pipefail
+            PLUGINS_DIR="${{ secrets.PROD_WP_PLUGINS_DIR }}"
+            TMP_ZIP="/tmp/wp-ai-customer-service.zip"
+            echo "[deploy] unzip to ${PLUGINS_DIR}/wp-ai-customer-service/"
+            rm -rf "${PLUGINS_DIR}/wp-ai-customer-service"
+            unzip -q -o "${TMP_ZIP}" -d "${PLUGINS_DIR}/wp-ai-customer-service"
+            rm -f "${TMP_ZIP}"
+            echo "[deploy] OK"
