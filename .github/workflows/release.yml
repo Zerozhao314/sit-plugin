@@ -48,7 +48,8 @@ jobs:
   #   ENABLE_PROD_DEPLOY = true
   # 并在 Secrets 中添加:
   #   PROD_WP_SSH_HOST       生产服务器 IP/域名 (如 prod.example.com)
-  #   PROD_WP_SSH_USER       SSH 登录用户名 (如 wpdeploy)
+  #   PROD_WP_SSH_PORT       SSH 端口 (共享主机常见 18765/2222/7822, 默认 22)
+  #   PROD_WP_SSH_USER       SSH 登录用户名 (如 wpdeploy 或 u3031-xxx)
   #   PROD_WP_SSH_KEY        SSH 私钥内容 (对应服务器 authorized_keys)
   #   PROD_WP_PLUGINS_DIR    WordPress 插件目录绝对路径 (如 /var/www/html/wp-content/plugins)
   #
@@ -77,13 +78,14 @@ jobs:
             --dir /tmp
           ls -lh /tmp/wp-ai-customer-service.zip
 
+      # 修复 SSH 端口硬编码: 新增 PROD_WP_SSH_PORT Secret (默认 22, 共享主机常见 18765/2222/7822)
       - name: 通过 SCP 上传 zip 到生产服务器
         uses: appleboy/scp-action@v0.1.7
         with:
           host:     ${{ secrets.PROD_WP_SSH_HOST }}
           username: ${{ secrets.PROD_WP_SSH_USER }}
           key:      ${{ secrets.PROD_WP_SSH_KEY }}
-          port:     22
+          port:     ${{ secrets.PROD_WP_SSH_PORT }}
           source: /tmp/wp-ai-customer-service.zip
           target: /tmp
 
@@ -93,14 +95,77 @@ jobs:
           host:     ${{ secrets.PROD_WP_SSH_HOST }}
           username: ${{ secrets.PROD_WP_SSH_USER }}
           key:      ${{ secrets.PROD_WP_SSH_KEY }}
-          port:     22
+          port:     ${{ secrets.PROD_WP_SSH_PORT }}
+          # ssh-action 默认环境变量可能不全, 加 envs 把插件目录直接作为 shell 变量用
+          envs: PLUGINS_DIR
+          # 防止共享主机 PATH 不包含 /usr/local/bin 之类导致 unzip/rm 找不到
+          command_timeout: 180s
           script_stop: true
           script: |
             set -euo pipefail
+            export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
             PLUGINS_DIR="${{ secrets.PROD_WP_PLUGINS_DIR }}"
             TMP_ZIP="/tmp/wp-ai-customer-service.zip"
-            echo "[deploy] unzip to ${PLUGINS_DIR}/wp-ai-customer-service/"
-            rm -rf "${PLUGINS_DIR}/wp-ai-customer-service"
-            unzip -q -o "${TMP_ZIP}" -d "${PLUGINS_DIR}/wp-ai-customer-service"
+            TARGET_DIR="${PLUGINS_DIR}/wp-ai-customer-service"
+
+            # === 安全前置检查 ===
+            # 1) PLUGINS_DIR 必须已存在且能写(否则直接失败不破坏任何东西)
+            if [ ! -d "${PLUGINS_DIR}" ]; then
+              echo "[deploy] FAIL: PLUGINS_DIR 不存在: ${PLUGINS_DIR}" >&2
+              echo "       请用 init-deploy-user.sh 探测实际路径, 再填 PROD_WP_PLUGINS_DIR" >&2
+              exit 2
+            fi
+            if [ ! -w "${PLUGINS_DIR}" ]; then
+              echo "[deploy] FAIL: PLUGINS_DIR 无写权限: ${PLUGINS_DIR}" >&2
+              echo "       当前用户: $(whoami)  目录 owner: $(stat -c '%U:%G' "${PLUGINS_DIR}")  权限: $(stat -c '%a' "${PLUGINS_DIR}")" >&2
+              exit 3
+            fi
+            # 2) zip 必须存在且非空
+            if [ ! -s "${TMP_ZIP}" ]; then
+              echo "[deploy] FAIL: zip 不存在或为空: ${TMP_ZIP}" >&2
+              exit 4
+            fi
+            # 3) unzip 命令必须存在
+            if ! command -v unzip >/dev/null 2>&1; then
+              echo "[deploy] FAIL: 服务器未安装 unzip。请在服务器上安装后重试:" >&2
+              echo "       共享主机: 控制面板找 PHP/SSH 扩展 或 联系运维" >&2
+              echo "       Debian/Ubuntu: sudo apt-get install -y unzip" >&2
+              echo "       CentOS/RHEL:   sudo yum install -y unzip" >&2
+              exit 5
+            fi
+
+            # === 执行部署 ===
+            BACKUP_DIR=""
+            # 4) 插件目录已存在 → 备份到 /tmp 做回滚 (保留 1 份)
+            if [ -d "${TARGET_DIR}" ]; then
+              BACKUP_DIR="/tmp/wp-ai-customer-service.backup.$(date +%s)"
+              echo "[deploy] 备份旧版本 -> ${BACKUP_DIR}"
+              mv "${TARGET_DIR}" "${BACKUP_DIR}"
+            fi
+
+            echo "[deploy] 解压 ${TMP_ZIP} -> ${TARGET_DIR}"
+            mkdir -p "${TARGET_DIR}"
+            unzip -q -o "${TMP_ZIP}" -d "${TARGET_DIR}"
+
+            # 5) 部署成功 → 删除 zip + 旧备份
             rm -f "${TMP_ZIP}"
+            if [ -n "${BACKUP_DIR}" ]; then
+              rm -rf "${BACKUP_DIR}"
+            fi
+
+            # 6) 写入部署元信息, 便于事后核对
+            cat > "${TARGET_DIR}/DEPLOYMENT_META.txt" <<EOF
+            Plugin:        wp-ai-customer-service
+            Deployed at:   $(date -Iseconds)
+            Deployed by:   GitHub Actions (${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
+            Tag:           ${GITHUB_REF_NAME}
+            Runner:        $(hostname)
+            SSH user:      $(whoami)
+            Target dir:    ${TARGET_DIR}
+            EOF
+
             echo "[deploy] OK"
+            echo "  插件主入口: ${TARGET_DIR}/wp-ai-customer-service.php"
+            echo "  文件数:     $(find "${TARGET_DIR}" -type f | wc -l)"
+            echo "  总大小:     $(du -sh "${TARGET_DIR}" | cut -f1)"
