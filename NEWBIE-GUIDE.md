@@ -82,7 +82,39 @@ wsl -e bash -lc "git config --global user.name"
 # 两边都应输出: Zerozhao314
 ```
 
-### Step 1.3 — 克隆两个仓库
+### Step 1.3 — 配置 SSH key(连接 GitHub 必需)
+
+```powershell
+# 1. 生成 Windows SSH key (用上一步的邮箱,一路回车不设密码)
+ssh-keygen -t ed25519 -C "why.zero.zhao@gmail.com" -f $env:USERPROFILE\.ssh\id_ed25519
+
+# 2. 生成 WSL SSH key
+wsl -e bash -lc "ssh-keygen -t ed25519 -C 'why.zero.zhao@gmail.com' -f ~/.ssh/id_ed25519 -N ''"
+
+# 3. 查看并复制 Windows 公钥 (整行复制,含 ssh-ed25519 前缀)
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub
+
+# 4. 添加到 GitHub: https://github.com/settings/ssh/new
+#    Title 填 "Windows",Key 粘贴上一步复制的公钥
+
+# 5. 同样复制 WSL 公钥并添加到 GitHub (Title 填 "WSL")
+wsl -e bash -lc "cat ~/.ssh/id_ed25519.pub"
+```
+
+**验证**:
+```powershell
+# 测试 Windows 连接
+ssh -T git@github.com
+# 期望: Hi Zerozhao314! You've successfully authenticated...
+
+# 测试 WSL 连接
+wsl -e bash -lc "ssh -T git@github.com"
+# 期望: 同上
+```
+
+> 第一次连接会问 `Are you sure you want to continue connecting (yes/no)?`,输入 `yes`。
+
+### Step 1.4 — 克隆两个仓库
 
 ```powershell
 # 插件仓库 (Windows)
@@ -93,9 +125,7 @@ git clone git@github.com:Zerozhao314/sit-plugin.git wp-ai-customer-service
 wsl -e bash -lc "cd ~ && git clone git@github.com:Zerozhao314/my-site.git ddev-test"
 ```
 
-如果报 `Permission denied (publickey)`,说明 SSH key 没配,看第 6.1 节。
-
-### Step 1.4 — 启用 git hook(关键)
+### Step 1.5 — 启用 git hook(关键)
 
 ```powershell
 cd d:\project\wp-ai-customer-service
@@ -108,17 +138,13 @@ git config --get core.hooksPath
 # 应输出: .githooks
 ```
 
-### Step 1.5 — 启动 DDEV
+### Step 1.6 — 启动 DDEV
 
 ```powershell
-# 方式 A: 一键启动(推荐)
-& "d:\project\start-debug.ps1"
-
-# 方式 B: 手动
 wsl -e bash -lc "cd ~/ddev-test && ddev start"
 ```
 
-首次启动需要 1-2 分钟下载 WordPress 镜像。
+**首次启动**需 3-5 分钟下载 DDEV 镜像 + WordPress 文件;后续启动只需 10-30 秒。
 
 **验证**:
 ```powershell
@@ -131,12 +157,12 @@ start https://ddev-test.ddev.site
 # 应看到 WordPress 默认首页
 ```
 
-### Step 1.6 — 部署插件到 DDEV
+### Step 1.7 — 部署插件到 DDEV
 
 ```powershell
 cd d:\project\wp-ai-customer-service
 
-# 触发一次同步(空 commit 触发 hook,或直接跑 deploy.ps1)
+# 手动同步插件源码到 DDEV(无需 commit)
 .\deploy.ps1
 ```
 
@@ -376,6 +402,19 @@ rm -rf "${TMP}"
 ```
 
 ### 4.7 看 PHP 错误日志
+
+> **首次使用前必须先开启 WP_DEBUG_LOG**(DDEV 默认关闭,debug.log 不会记录 PHP 错误):
+
+```powershell
+# 开启 WP_DEBUG + WP_DEBUG_LOG (一次性, 永久生效)
+wsl -e bash -lc "cd ~/ddev-test && ddev config --web-environment-add=WP_DEBUG=true,WP_DEBUG_LOG=true && ddev restart"
+
+# 验证
+wsl -e bash -lc "cd ~/ddev-test && ddev wp eval 'var_dump(WP_DEBUG_LOG);'"
+# 期望: bool(true)
+```
+
+开启后,PHP 错误才会写入 `wp-content/debug.log`:
 
 ```powershell
 # 实时跟踪
@@ -676,7 +715,7 @@ rm -rf "${TMP}"
 | [.github/workflows/CHANGELOG.md](file:///D:/project/wp-ai-customer-service/.github/workflows/CHANGELOG.md) | GitHub Actions workflow 变更说明 | 想了解 CI 历史与修复细节 |
 | [docs/RESTORE-GUIDE.md](file:///D:/project/wp-ai-customer-service/docs/RESTORE-GUIDE.md) | 灾难恢复完整手册(615 行) | 出大事了要恢复 |
 | [.github/workflows/release.yml](file:///D:/project/wp-ai-customer-service/.github/workflows/release.yml) | GitHub Actions 完整配置 | 想改 CI 配置 |
-| [.ddev/skills/wp-ddev-quickstart/SKILL.md](file:///D:/project/.trae/skills/wp-ddev-quickstart/SKILL.md) | DDEV 启动 SKILL | 想用 IDE 快捷启动 |
+| [.trae/skills/wp-ddev-quickstart/SKILL.md](file:///D:/project/.trae/skills/wp-ddev-quickstart/SKILL.md) | DDEV 启动 SKILL | 想用 IDE 快捷启动 |
 
 ---
 
