@@ -78,16 +78,29 @@ jobs:
             --dir /tmp
           ls -lh /tmp/wp-ai-customer-service.zip
 
-      # 修复 SSH 端口硬编码: 新增 PROD_WP_SSH_PORT Secret (默认 22, 共享主机常见 18765/2222/7822)
-      - name: 通过 SCP 上传 zip 到生产服务器
-        uses: appleboy/scp-action@v0.1.7
+      # appleboy/scp-action 对 ed25519 OPENSSH key + 非标准端口(18765)兼容性差
+      # 改用 base64 编码 + ssh-action 传输, 规避 SCP 协议层问题
+      - name: 准备 zip (base64 编码)
+        run: |
+          echo "[deploy] base64 编码 zip"
+          B64=$(base64 /tmp/wp-ai-customer-service.zip)
+          echo "ZIP_BASE64=${B64}" >> $GITHUB_ENV
+          echo "[deploy] base64 长度: ${#B64} 字符"
+
+      - name: 通过 SSH base64 传输 zip 到服务器
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host:     ${{ secrets.PROD_WP_SSH_HOST }}
           username: ${{ secrets.PROD_WP_SSH_USER }}
           key:      ${{ secrets.PROD_WP_SSH_KEY }}
           port:     ${{ secrets.PROD_WP_SSH_PORT }}
-          source: /tmp/wp-ai-customer-service.zip
-          target: /tmp
+          envs: ZIP_BASE64
+          command_timeout: 60s
+          script: |
+            echo "[deploy] 解码 base64 -> /tmp/wp-ai-customer-service.zip"
+            echo "${ZIP_BASE64}" | base64 -d > /tmp/wp-ai-customer-service.zip
+            ls -lh /tmp/wp-ai-customer-service.zip
+            file /tmp/wp-ai-customer-service.zip
 
       - name: SSH 解压并部署到 WordPress 插件目录
         uses: appleboy/ssh-action@v1.2.0
