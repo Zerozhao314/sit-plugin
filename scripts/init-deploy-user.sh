@@ -95,26 +95,39 @@ echo ""
 # =============================================================
 CANDIDATES=()
 # 2.1 从当前用户 HOME 开始找 (共享主机常见 layout)
+#    注意: 不用 bash 进程替换 <(...) (某些共享主机 shell 不支持 /dev/fd)
+FIND_CANDIDATES_TMP="$(mktemp)"
+FIND_WP_TMP="$(mktemp)"
+trap 'rm -f "${FIND_CANDIDATES_TMP}" "${FIND_WP_TMP}"' EXIT
+
 for base in "${HOME}" "/var/www/vhosts" "/home/vhosts" "/var/www"; do
   if [ -d "${base}" ]; then
     # 快速定位: 同时存在 wp-content/plugins + wp-settings.php = WP root
-    while IFS= read -r -d '' plugin_dir; do
-      wp_root="$(dirname "$(dirname "${plugin_dir}")")"
-      if [ -f "${wp_root}/wp-settings.php" ]; then
-        CANDIDATES+=("${plugin_dir}")
-      fi
-    done < <(find "${base}" -maxdepth 7 -type d -name plugins -path "*/wp-content/*" -print0 2>/dev/null \
-            | head -20)
+    find "${base}" -maxdepth 7 -type d -name plugins -path "*/wp-content/*" 2>/dev/null \
+      | head -20 >> "${FIND_CANDIDATES_TMP}" || true
+    # wp-config.php 探测 (后面单独用)
+    find "${base}" -maxdepth 7 -type f -name "wp-config.php" 2>/dev/null \
+      | head -20 >> "${FIND_WP_TMP}" || true
   fi
 done
 
-# 2.2 另外: 找 wp-config.php 再推导
-while IFS= read -r -d '' wp_config; do
+# 用 while-read 处理 (兼容 sh/bash/dash)
+while IFS= read -r plugin_dir; do
+  [ -z "${plugin_dir:-}" ] && continue
+  wp_root="$(dirname "$(dirname "${plugin_dir}")")"
+  if [ -f "${wp_root}/wp-settings.php" ]; then
+    CANDIDATES+=("${plugin_dir}")
+  fi
+done < "${FIND_CANDIDATES_TMP}"
+
+# 2.2 另外: 找 wp-config.php 再推导 (某些主题 WP root 不等于 plugins 上级)
+while IFS= read -r wp_config; do
+  [ -z "${wp_config:-}" ] && continue
   wp_root="$(dirname "${wp_config}")"
   if [ -d "${wp_root}/wp-content/plugins" ]; then
     CANDIDATES+=("${wp_root}/wp-content/plugins")
   fi
-done < <(find "${HOME}" -maxdepth 7 -type f -name "wp-config.php" -print0 2>/dev/null | head -20)
+done < "${FIND_WP_TMP}"
 
 # 去重
 PLUGIN_DIRS=()
