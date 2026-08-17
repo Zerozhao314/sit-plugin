@@ -79,28 +79,54 @@ jobs:
           ls -lh /tmp/wp-ai-customer-service.zip
 
       # appleboy/scp-action 对 ed25519 OPENSSH key + 非标准端口(18765)兼容性差
-      # 改用 base64 编码 + ssh-action 传输, 规避 SCP 协议层问题
-      - name: 准备 zip (base64 编码)
+      # 改用 ssh-action + sftp(原生 ssh 子命令), 规避 SCP action 协议层问题
+      # 私钥写入 runner 临时文件, 通过 sftp put 上传
+      - name: 配置 SSH 私钥 (写入 runner 临时文件)
         run: |
-          echo "[deploy] base64 编码 zip"
-          B64=$(base64 /tmp/wp-ai-customer-service.zip)
-          echo "ZIP_BASE64=${B64}" >> $GITHUB_ENV
-          echo "[deploy] base64 长度: ${#B64} 字符"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_WP_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 验证 key 格式
+          head -1 ~/.ssh/deploy_key
+          tail -1 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null && echo "[deploy] key 格式 OK"
 
-      - name: 通过 SSH base64 传输 zip 到服务器
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host:     ${{ secrets.PROD_WP_SSH_HOST }}
-          username: ${{ secrets.PROD_WP_SSH_USER }}
-          key:      ${{ secrets.PROD_WP_SSH_KEY }}
-          port:     ${{ secrets.PROD_WP_SSH_PORT }}
-          envs: ZIP_BASE64
-          command_timeout: 60s
-          script: |
-            echo "[deploy] 解码 base64 -> /tmp/wp-ai-customer-service.zip"
-            echo "${ZIP_BASE64}" | base64 -d > /tmp/wp-ai-customer-service.zip
-            ls -lh /tmp/wp-ai-customer-service.zip
-            file /tmp/wp-ai-customer-service.zip
+      - name: 通过 sftp 上传 zip 到生产服务器
+        env:
+          SSH_HOST: ${{ secrets.PROD_WP_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_WP_SSH_USER }}
+          SSH_PORT: ${{ secrets.PROD_WP_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          # 用 sftp 批处理模式上传 (兼容非标准端口 + ed25519 key)
+          # -o 选项: 跳过 host key 检查 (CI 环境), 强制使用我们指定的 key
+          echo "[deploy] sftp 上传 zip -> ${SSH_USER}@${SSH_HOST}:${SSH_PORT}:/tmp/"
+          sftp -P "${SSH_PORT}" \
+               -i ~/.ssh/deploy_key \
+               -o IdentitiesOnly=yes \
+               -o StrictHostKeyChecking=accept-new \
+               -o BatchMode=yes \
+               -b - \
+               "${SSH_USER}@${SSH_HOST}" <<EOF
+            put /tmp/wp-ai-customer-service.zip /tmp/wp-ai-customer-service.zip
+            bye
+          EOF
+          echo "[deploy] sftp 上传完成"
+          # 验证服务器端文件大小 (与本地对比)
+          LOCAL_SIZE=$(stat -c%s /tmp/wp-ai-customer-service.zip)
+          REMOTE_SIZE=$(ssh -p "${SSH_PORT}" \
+                            -i ~/.ssh/deploy_key \
+                            -o IdentitiesOnly=yes \
+                            -o StrictHostKeyChecking=accept-new \
+                            -o BatchMode=yes \
+                            "${SSH_USER}@${SSH_HOST}" \
+                            "stat -c%s /tmp/wp-ai-customer-service.zip")
+          echo "[deploy] 文件大小对比: local=${LOCAL_SIZE} remote=${REMOTE_SIZE}"
+          if [ "${LOCAL_SIZE}" != "${REMOTE_SIZE}" ]; then
+            echo "[deploy] FAIL: 文件大小不一致, 上传可能损坏" >&2
+            exit 1
+          fi
+          echo "[deploy] 文件大小一致 ✓"
 
       - name: SSH 解压并部署到 WordPress 插件目录
         uses: appleboy/ssh-action@v1.2.0
